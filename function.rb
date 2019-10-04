@@ -4,33 +4,12 @@ require 'json'
 require 'jwt'
 require 'pp'
 
-def response(body: nil, status: 200)
+# Echo out API response to the server.
+def response(body, status)
   {
     body: body ? body.to_json + "\n" : '',
     statusCode: status
   }
-end
-
-# This funciton parses out HTTP request and assign to 
-# Corresponding Switch Case
-def API_triggers(body: nil)
-  #process required header here!
-  endpoint = body['path'].downcase
-  method = (body['httpMethod'] || "").downcase
-  request_body = (body['body'] || "")
-  content_type = (body['headers']['Content-Type'] || "").downcase
-  auth = (body['headers']['Authorization'] || "")
-  
-  case endpoint
-    when "/" #ONLY GET from here
-      get_response = get_token(auth)
-      response(post_response['response_body'], post_response['response_status_code'])
-    when "/token" #ONLY POST to token!
-      post_response = post_token(endpoint, method, content_type, request_body)
-      response(post_response['response_body'], post_response['response_status_code'])
-    else 
-      response(Array[], 404) #Source not found!
-  end
 end
 
 # Verify if the requested http method is allowed to 
@@ -81,7 +60,6 @@ def post_token(endpoint, method, content_type, request_body)
     } 
   end
 
-
   ENV['JWT_SECRET'] = 'CHENZHU'
   payload = {
     :data => request_body,
@@ -95,8 +73,17 @@ def post_token(endpoint, method, content_type, request_body)
   }
 end
 
+# [GET] process the token and translate the token back
+# to its original JSON string.
+def get_token(endpoint, method, auth)
+  #Validate endpoint with method!
+  if(!valid_method(endpoint, method))
+    return {
+      "response_body" => "Invalid HTTP Method",
+      "response_status_code" => 405 
+    } 
+  end
 
-def get_token(auth)
   #if auth header is empty, then no auth header was passed in!  
   auth = auth.split('Bearer ')
   auth = (auth[1] || "")
@@ -114,10 +101,20 @@ def get_token(auth)
   ENV['JWT_SECRET'] = 'CHENZHU'
   begin
     decoded = JWT.decode auth, ENV['JWT_SECRET'], true, { algorithm: 'HS256'}
-  rescue JWT.DecodeError
+  rescue JWT::ImmatureSignature
+    return {
+      "response_body" => "ImmatureSignature! ",
+      "response_status_code" => 401 
+    } 
+  rescue JWT::ExpiredSignature
+    return {
+      "response_body" => "ExpiredSignature! ",
+      "response_status_code" => 401 
+    } 
+  rescue JWT::DecodeError
     return {
       "response_body" => "Token Invalid! ",
-      "response_status_code" => 401 
+      "response_status_code" => 403 
     } 
   end
 
@@ -128,12 +125,41 @@ def get_token(auth)
 
 end
 
+# This funciton parses out HTTP request and assign to 
+# Corresponding Switch Case
+def API_triggers(body)
+  #process required header here!
+  endpoint = body['path'].downcase
+  method = (body['httpMethod'] || "").downcase
+  request_body = (body['body'] || "")
+  #Downgrade all hash keys! 
+  headers = body['headers']
+  headers = headers.transform_keys(&:downcase)
+  content_type = (headers['content-type'] || "")#.downcase #Hummm case sensitive here. 
+  auth = (headers['authorization'] || "")
+  
+  #puts(content_type.class)
+
+  case endpoint
+    when "/" #ONLY GET from here
+      get_response = get_token(endpoint, method, auth)
+      response(get_response['response_body'], get_response['response_status_code'])
+    when "/token" #ONLY POST to token!
+      post_response = post_token(endpoint, method, content_type, request_body)
+      response(post_response['response_body'], post_response['response_status_code'])
+    else 
+      response(Array[], 404) #Source not found!
+  end
+end
+
 def main(event:, context:)
   # You shouldn't need to use context, but its fields are explained here:
   # https://docs.aws.amazon.com/lambda/latest/dg/ruby-context.html
   
   #response(body: event, status: 200)
-  API_triggers(body: event)
+  #event = JSON.parse(event[:event])
+  #puts event
+  API_triggers(event)
 end
 
 
