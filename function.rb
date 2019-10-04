@@ -4,13 +4,6 @@ require 'json'
 require 'jwt'
 require 'pp'
 
-def main(event:, context:)
-  # You shouldn't need to use context, but its fields are explained here:
-  # https://docs.aws.amazon.com/lambda/latest/dg/ruby-context.html
-  #response(body: event, status: 200)
-  API_triggers(body: event)
-end
-
 def response(body: nil, status: 200)
   {
     body: body ? body.to_json + "\n" : '',
@@ -21,20 +14,22 @@ end
 # This funciton parses out HTTP request and assign to 
 # Corresponding Switch Case
 def API_triggers(body: nil)
+  #process required header here!
   endpoint = body['path'].downcase
   method = (body['httpMethod'] || "").downcase
   request_body = (body['body'] || "")
   content_type = (body['headers']['Content-Type'] || "").downcase
   auth = (body['headers']['Authorization'] || "")
-
+  
   case endpoint
-  when "/" #ONLY GET from here
-
-  when "/token" #ONLY POST to token!
-    post_response = post_token(endpoint, method, content_type, request_body)
-    response(post_response['response_body'], post_response['response_status_code'])
-  else 
-    response(Array[], 404) #Source not found!
+    when "/" #ONLY GET from here
+      get_response = get_token(auth)
+      response(post_response['response_body'], post_response['response_status_code'])
+    when "/token" #ONLY POST to token!
+      post_response = post_token(endpoint, method, content_type, request_body)
+      response(post_response['response_body'], post_response['response_status_code'])
+    else 
+      response(Array[], 404) #Source not found!
   end
 end
 
@@ -58,7 +53,6 @@ def valid_json_format(json_string)
   end
 end
 
-
 # [POST] process data content for the endpoint /token
 # Data content must contain valid json string
 # then output {token => HS256<{data, exp nbf}>} content
@@ -66,7 +60,7 @@ def post_token(endpoint, method, content_type, request_body)
   #Validate endpoint with method!
   if(!valid_method(endpoint, method))
     return {
-      "response_body" => "Invalid HTTP Method"
+      "response_body" => "Invalid HTTP Method",
       "response_status_code" => 405 
     } 
   end
@@ -74,7 +68,7 @@ def post_token(endpoint, method, content_type, request_body)
   #Validate content type
   if(content_type != 'application/json')
     return {
-      "response_body" => "Invalid Content Type"
+      "response_body" => "Invalid Content Type",
       "response_status_code" => 415 
     } 
   end
@@ -82,7 +76,7 @@ def post_token(endpoint, method, content_type, request_body)
   #Validate content string type
   if(!valid_json_format(request_body))
     return {
-      "response_body" => "Invalid JSON String"
+      "response_body" => "Invalid JSON String",
       "response_status_code" => 422 
     } 
   end
@@ -96,17 +90,50 @@ def post_token(endpoint, method, content_type, request_body)
   }
 
   return {
-    "response_body" => { :token => JWT.encode payload, ENV['JWT_SECRET'], 'HS256'}
+    "response_body" => { :token => (JWT.encode payload, ENV['JWT_SECRET'], 'HS256')},
     "response_status_code" => 201 
   }
 end
 
 
-def get_token()
+def get_token(auth)
+  #if auth header is empty, then no auth header was passed in!  
+  auth = auth.split('Bearer ')
+  auth = (auth[1] || "")
+
+  if auth.empty?
+    return {
+      "response_body" => "No Authorization Header Is Provided.",
+      "response_status_code" => 403 
+    } 
+  end
+
+  #1. decode the HS256 string and parse it into Ruby hash
+  # According to https://github.com/jwt/ruby-jwt
+  # JWT will automatically verify expieration time!
+  ENV['JWT_SECRET'] = 'CHENZHU'
+  begin
+    decoded = JWT.decode auth, ENV['JWT_SECRET'], true, { algorithm: 'HS256'}
+  rescue JWT.DecodeError
+    return {
+      "response_body" => "Token Invalid! ",
+      "response_status_code" => 401 
+    } 
+  end
+
+  return {
+    "response_body" => decoded["data"],
+    "response_status_code" => 200 
+  }
+
+end
+
+def main(event:, context:)
+  # You shouldn't need to use context, but its fields are explained here:
+  # https://docs.aws.amazon.com/lambda/latest/dg/ruby-context.html
   
-
-
-
+  #response(body: event, status: 200)
+  API_triggers(body: event)
 end
 
 
