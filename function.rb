@@ -62,7 +62,7 @@ def post_token(endpoint, method, content_type, request_body)
 
   ENV['JWT_SECRET'] = 'CHENZHU'
   payload = {
-    :data => request_body,
+    :data => JSON.parse(request_body),
     :exp => Time.now.to_i + 5, #5s later
     :nbf => Time.now.to_i + 2  #2s later
   }
@@ -119,7 +119,7 @@ def get_token(endpoint, method, auth)
   end
 
   return {
-    "response_body" => decoded["data"],
+    "response_body" => decoded[0]["data"],
     "response_status_code" => 200 
   }
 
@@ -158,43 +158,9 @@ def main(event:, context:)
   
   #response(body: event, status: 200)
   #event = JSON.parse(event[:event])
-  #puts event
+  #puts(event['body'].class)
   API_triggers(event)
 end
-
-
-#TODO: remove the following lines after done with testing!. 
-#if $PROGRAM_NAME == __FILE__
-  # If you run this file directly via `ruby function.rb` the following code
-  # will execute. You can use the code below to help you test your functions
-  # without needing to deploy first.
-  #ENV['JWT_SECRET'] = 'NOTASECRET'
-
-  # Call /token
-  #PP.pp main(context: {}, event: {
-  #             'body' => '{"name": "bboe"}',
-  #             'headers' => { 'Content-Type' => 'application/json' },
-  #             'httpMethod' => 'POST',
-  #             'path' => '/token'
-  #           })
-
-  # Generate a token
-  #payload = {
-  #  data: { user_id: 128 },
-  #  exp: Time.now.to_i + 1,
-  #  nbf: Time.now.to_i
-  #}
-  #token = JWT.encode payload, ENV['JWT_SECRET'], 'HS256'
-  # Call /
-  #PP.pp main(context: {}, event: {
-  #             'headers' => { 'Authorization' => "Bearer #{token}",
-  #                            'Content-Type' => 'application/json' },
-  #             'httpMethod' => 'GET',
-  #             'path' => '/'
-  #          })
-#end
-
-
 
 
 
